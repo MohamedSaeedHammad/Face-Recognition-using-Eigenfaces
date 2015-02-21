@@ -1,0 +1,137 @@
+%Welcome
+%Mathematics Project
+%Face Recognition using Eigenfaces
+%Group# 6
+
+clear all, close all;
+N=1500  ; % image size
+M=15  ;% number of images in dataset
+% name of img files must be on the form 'subject'num
+
+%% Loading Data set
+
+for i=1:M
+INFO=imfinfo(strcat('subject',num2str(i)));
+store.data{i}=imread(strcat('subject',num2str(i)),INFO.Format);
+if length(size(store.data(i))) == 3
+store.data{i}=rgb2gray(store.data{i});
+end
+store.data{i}=imresize(store.data{i},[N N] );
+stx{i}=store.data{i};
+end 
+
+figure('name','Data Set');
+for i=1:length(store.data)
+ figure(1),subplot_tight(3,5,i), imshow(store.data{i})
+end
+
+
+%% compute mean
+avImg=zeros(N);
+for j=1:M
+    store.data{j} = im2single(store.data{j});
+    avImg   =avImg  + (1/M)*store.data{j};
+end
+figure('name','Mean of Data Set');
+figure(2),imshow(avImg,'Initialmagnification','fit');
+
+%% Remove mean
+for j=1:M
+    store.dataAvg{j}  = store.data{j} -avImg;
+end
+
+figure('name','Significant Features of each Image');
+for i=1:length(store.dataAvg)
+ figure(3),subplot_tight(3,5,i), imshow(store.dataAvg{i})
+end
+
+
+%% generate A = [ img1(:)  img2(:) ...  imgM(:) ];
+A = zeros(N*N,M);% (N*N)*M   2500*12
+for j=1:M
+    A(:,j) = store.dataAvg{j}(:);
+end
+% covariance matrix small dimension (transposed)
+C = A'*A;
+%figure(4),imagesc(C);title('Covariance')
+
+%% eigen vectros  in small dimension
+[ eigvec,eigval ]  = eig(C); %eigvec is M*M , eigval is diagonal Matrix
+% eigan face in large dimension  A*eigvec is eigen vector of Clarge
+Vlarge = A*eigvec;% (2500*M) * (M*M) =2500 *M
+% reshape to eigen face
+eigenfaces=[];
+for j=1:M
+    c  = Vlarge(:,j);
+    eigenfaces{j} = reshape(c,N,N);
+end
+x=diag(eigval);
+[xc,xci]=sort(x,'descend');% largest eigenval
+
+figure('name','EigenFaces');
+for i=1:length(store.dataAvg)
+ figure(4),subplot_tight(3,5,i), imshow(eigenfaces{xci(i)})
+end
+
+
+%% weights
+significant_eigenfaces=M-1;% select  eigen faces
+for i=1:M  % image number
+  for j=1:significant_eigenfaces 
+     trainingset_weights(i,j) =   (A(:,i)') * eigenfaces{xci(j)}(:);
+  end
+end
+
+%% Classify new image 
+
+%INFO=imfinfo('2w');
+%testnewFace=imread(INFO.Filename,INFO.Format);
+testnewFace=imread('subject05.glasses','gif');
+if length(size(testnewFace)) == 3
+testnewFace  =rgb2gray(testnewFace);
+end
+testnewFace = imresize(testnewFace,[N N]);
+testnewFace   =  im2single(testnewFace);
+figure(5), subplot_tight(1,2,1),imshow(testnewFace,'Initialmagnification','fit'); title('Test Face')
+Aface = testnewFace(:)-avImg(:); % normalized test face
+for(j=1:significant_eigenfaces)
+  testface_weights(j)  =  (Aface')* eigenfaces{xci(j)}(:) ;
+end
+
+
+% compute distance
+for i=1:M  
+    newsum=0;
+    for(j=1:significant_eigenfaces)
+        newsum = newsum + (testface_weights(j) -trainingset_weights(i,j)).^2;
+    end
+    diffWeights(i) =   sqrt(newsum);
+end
+
+
+diffWeights  = diffWeights;
+display('Distance between test image and trainingset are')
+fprintf('%.1f\n',diffWeights)
+sorteddiffWeights = sort(diffWeights);
+
+%% Comparing distance with threshold ( theta )
+
+if min(diffWeights) <=100000 && sorteddiffWeights(2) - min(diffWeights) >=40000
+ display('Image is  a Face')
+ display('Match Found');
+[minimum_distance ,subject_no]=min(diffWeights);
+fprintf('Minimum Distance is %f\n ', minimum_distance)
+fprintf('Subject no. is %d\n' ,subject_no)
+figure(5), subplot_tight(1,2,2),imshow(store.data{subject_no},'Initialmagnification','fit'); title('Subject match')
+
+
+elseif  min(diffWeights) <=100000
+[minimum_distance ,subject_no]=min(diffWeights);
+display('Image is  a face')
+fprintf('No match but closest subject no. is %d\n' ,subject_no)
+figure(5), subplot_tight(1,2,2),imshow(store.data{subject_no},'Initialmagnification','fit'); title('Closest Subject')
+
+else 
+fprintf('minimum_distance is %f\n ', min(diffWeights) )
+display('Image is not a Face')
+end
